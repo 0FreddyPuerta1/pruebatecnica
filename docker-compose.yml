@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: db_crud
+      MYSQL_USER: user_crud
+      MYSQL_PASSWORD: root
+    networks:
+      - app_network
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  ingestion-ms:
+    build:
+      context: ./ingestion-ms
+    environment:
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME}
+      AWS_REGION: ${AWS_REGION}
+      AWS_KEY: ${AWS_INGESTION_KEY}
+      AWS_SECRET_KEY: ${AWS_INGESTION_SECRET_KEY}
+      PROCESSING_MS_URL: http://processing-ms:3002/
+    container_name: ingestion_service
+    networks:
+      - app_network
+    ports:
+      - "3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+  
+
+  processing-ms:
+    build:
+      context: ./processing-ms
+    environment:
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME}
+      AWS_REGION: ${AWS_REGION}
+      AWS_KEY: ${AWS_PROCESSING_KEY}
+      AWS_SECRET_KEY: ${AWS_PROCESSING_SECRET_KEY}
+      DB_NAME: db_crud
+      DB_USER: user_crud
+      DB_PASSWORD: root
+      DB_HOST: mysql_db
+      DB_PORT: 3306
+    container_name: processing_service
+    networks:
+      - app_network
+    ports:
+      - "3002:3002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    
+
+  products-ms:
+    build:
+      context: ./products-ms
+    container_name: products_service
+    environment:
+      DB_NAME: db_crud
+      DB_USER: user_crud
+      DB_PASSWORD: root
+      DB_HOST: mysql_db
+      DB_PORT: 3306
+    networks:
+      - app_network
+    ports:
+      - "3003:3003"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    networks:
+      - app_network
+    ports:
+      - "3004:3004"
+    
+    
+
+networks:
+  app_network:
+    driver: bridge
